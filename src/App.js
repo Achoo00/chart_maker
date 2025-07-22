@@ -130,6 +130,7 @@ function App() {
         }
       });
     }
+    console.log('Generated Mermaid Definition:', def);
     setMermaidDef(def);
     setMermaidError("");
   };
@@ -140,16 +141,22 @@ function App() {
       typeof window === 'undefined' ||
       typeof document === 'undefined' ||
       !mermaidDef ||
-      errors.length > 0
+      errors.length > 0 ||
+      !previewRef.current
     ) {
       return;
     }
     setMermaidError('');
-    try {
-      mermaid.init(undefined, '.mermaid');
-    } catch (err) {
-      setMermaidError('Mermaid rendering error: ' + err.message);
-    }
+    // Generate a unique id for each render
+    const renderId = 'mermaid-' + Date.now();
+    mermaid.render(renderId, mermaidDef)
+      .then(({ svg }) => {
+        previewRef.current.innerHTML = svg;
+        console.log('Mermaid SVG rendered:', svg);
+      })
+      .catch(err => {
+        setMermaidError('Mermaid rendering error: ' + err.message);
+      });
     // eslint-disable-next-line
   }, [mermaidDef, errors]);
 
@@ -212,7 +219,7 @@ function App() {
               <div style={{ color: 'red' }}>{mermaidError}</div>
             )}
             {!mermaidError && mermaidDef && errors.length === 0 && (
-              <div className="mermaid">{mermaidDef}</div>
+              <div className="mermaid" ref={previewRef}></div>
             )}
           </div>
         </div>

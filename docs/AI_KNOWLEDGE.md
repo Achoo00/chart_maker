@@ -82,6 +82,67 @@ This document serves as a persistent knowledge base for the FlowGenius project. 
 
 -----
 
+## 5. Debugging Log: React + Mermaid Rendering Issue (2024-06)
+
+### Problem
+- Flowchart preview area did not render the diagram, even though the Mermaid definition was correct and no errors appeared in the console.
+- The `.mermaid` element was present, but the SVG was empty or missing.
+
+### Step-by-Step Debugging Process
+
+1. **Initial Checks**
+   - Verified that Mermaid was initialized and the correct definition was being generated (multi-line, valid syntax).
+   - Confirmed no errors in the browser console.
+
+2. **DOM Inspection**
+   - Inspected the `.mermaid` element after clicking "Generate Flowchart".
+   - Found that the SVG was present but empty (`<g></g>`), indicating Mermaid attempted to render but failed.
+
+3. **Console Logging**
+   - Added `console.log` after `mermaid.init` to inspect the innerHTML of the preview div.
+   - Confirmed that after `mermaid.init`, the SVG was still empty.
+
+4. **Hypothesis**
+   - Suspected a timing or API issue, especially with Mermaid v10+ and React's dynamic rendering.
+   - Noted that `mermaid.init` is not recommended for dynamic rendering in React with newer Mermaid versions.
+
+5. **Solution: Switch to `mermaid.render`**
+   - Updated the rendering logic to use `mermaid.render(id, definition)`, which returns a Promise with the SVG string.
+   - Injected the SVG string directly into the preview div's `innerHTML`.
+   - Example:
+     ```js
+     useEffect(() => {
+       if (
+         typeof window === 'undefined' ||
+         typeof document === 'undefined' ||
+         !mermaidDef ||
+         errors.length > 0 ||
+         !previewRef.current
+       ) {
+         return;
+       }
+       setMermaidError('');
+       const renderId = 'mermaid-' + Date.now();
+       mermaid.render(renderId, mermaidDef)
+         .then(({ svg }) => {
+           previewRef.current.innerHTML = svg;
+           console.log('Mermaid SVG rendered:', svg);
+         })
+         .catch(err => {
+           setMermaidError('Mermaid rendering error: ' + err.message);
+         });
+     }, [mermaidDef, errors]);
+     ```
+
+6. **Result**
+   - The flowchart rendered correctly in the preview area.
+   - This approach is robust for React + Mermaid v10+ integration.
+
+### Key Takeaway
+- For React apps using Mermaid v10+, always use `mermaid.render` for dynamic diagram rendering. Avoid `mermaid.init` for dynamic or programmatic rendering in React.
+
+-----
+
 ## Robust Mermaid.js Rendering in React: Solution Log
 
 ### Problem Encountered
@@ -135,3 +196,68 @@ useEffect(() => {
 ### Additional Notes
 - For Jest tests, mock the `mermaid` module in `setupTests.js` to avoid ESM import errors.
 - This pattern is recommended for any React + Mermaid integration.
+
+---
+
+## Analysis
+
+- **No errors in the console** (other than a minor eslint warning, which is unrelated to rendering).
+- **Mermaid is initialized** (so the library is loaded).
+- **The “Flowchart Preview” area shows the raw Mermaid definition as text, not a rendered diagram.**
+- The Mermaid definition you posted is:
+  ```
+  flowchart LR S1(Start\nBegin the process) S2[Do Task\nPerform the main task] S3{Decision\nIs it complete?} S4(End\nFinish) S1 -->|Next| S2 S2 -->|Check| S3 S3 -->|No| S2 S3 -->|Yes| S4 
+  ```
+  This is a single line, not the usual multi-line Mermaid format.
+
+---
+
+## Hypothesis
+
+**Mermaid expects each node and edge to be on its own line.**  
+If you pass the entire definition as a single line, Mermaid may not parse it correctly, resulting in no diagram being rendered.
+
+---
+
+## Debugging Step
+
+### 1. **Check the Mermaid Definition Formatting**
+
+Let’s log the actual `mermaidDef` string to the console before rendering, to see if it’s formatted as expected.
+
+**Add this line before `setMermaidDef(def);` in your `handleGenerate` function:**
+```js
+console.log('Generated Mermaid Definition:', def);
+```
+
+Then:
+- Enter your flowchart definition and click “Generate Flowchart.”
+- Check the console for the output.  
+- Is the Mermaid definition multi-line, with each node/edge on its own line?
+
+---
+
+### 2. **Expected Format Example**
+
+A correct Mermaid definition should look like:
+```
+flowchart LR
+  S1(Start\nBegin the process)
+  S2[Do Task\nPerform the main task]
+  S3{Decision\nIs it complete?}
+  S4(End\nFinish)
+  S1 -->|Next| S2
+  S2 -->|Check| S3
+  S3 -->|No| S2
+  S3 -->|Yes| S4
+```
+
+---
+
+## Next Steps
+
+1. **Add the console.log as above.**
+2. **Paste the output here** (or confirm if it matches the expected format).
+3. If it’s a single line, I’ll help you fix the code to generate a multi-line Mermaid definition.
+
+Let me know what you find!
