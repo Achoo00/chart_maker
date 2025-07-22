@@ -11,6 +11,8 @@ function App() {
   const [errors, setErrors] = useState([]);
   const [mermaidError, setMermaidError] = useState("");
   const [mermaidDef, setMermaidDef] = useState("");
+  const [errorPanelOpen, setErrorPanelOpen] = useState(true); // UI state for error panel
+  const prevErrorsRef = useRef([]);
   const previewRef = useRef(null);
 
   useEffect(() => {
@@ -18,66 +20,97 @@ function App() {
     console.log("Mermaid initialized!");
   }, []);
 
+  // Auto-open error panel if new errors are detected after Generate
+  useEffect(() => {
+    if (errors.length > 0 && errors.join('\n') !== prevErrorsRef.current.join('\n')) {
+      setErrorPanelOpen(true);
+    }
+    prevErrorsRef.current = errors;
+  }, [errors]);
+
   const handleGenerate = () => {
     const newErrors = [];
-    // Simple regex to extract FLOWCHART_NAME and ORIENTATION
+    const lines = inputText.split(/\r?\n/);
+    // Track line numbers for each section
+    let flowchartNameLine = -1;
+    let orientationLine = -1;
+    const stepLineNumbers = [];
+    const linkLineNumbers = [];
+
+    // Find FLOWCHART_NAME and ORIENTATION lines
+    lines.forEach((line, idx) => {
+      if (/^\s*FLOWCHART_NAME\s*:/i.test(line) && flowchartNameLine === -1) flowchartNameLine = idx + 1;
+      if (/^\s*ORIENTATION\s*:/i.test(line) && orientationLine === -1) orientationLine = idx + 1;
+    });
     const nameMatch = inputText.match(/^\s*FLOWCHART_NAME\s*:\s*(.+)$/im);
     const orientationMatch = inputText.match(/^\s*ORIENTATION\s*:\s*(.+)$/im);
     setFlowchartName(nameMatch ? nameMatch[1].trim() : "");
     setOrientation(orientationMatch ? orientationMatch[1].trim() : "");
 
-    if (!nameMatch) newErrors.push("FLOWCHART_NAME is required.");
-    if (!orientationMatch) newErrors.push("ORIENTATION is required.");
+    if (!nameMatch) newErrors.push(`Line ${flowchartNameLine > 0 ? flowchartNameLine : 1}: FLOWCHART_NAME is required.`);
+    if (!orientationMatch) newErrors.push(`Line ${orientationLine > 0 ? orientationLine : 1}: ORIENTATION is required.`);
 
-    // Parse STEP definitions
-    const stepLines = inputText.split(/\r?\n/).filter(line => /^\s*STEP\s*:/i.test(line));
-    const parsedSteps = stepLines.map(line => {
-      // Remove 'STEP:' and split by comma
-      const parts = line.replace(/^\s*STEP\s*:/i, '').split(',').map(s => s.trim());
+    // Parse STEP definitions and track line numbers
+    const stepLines = lines
+      .map((line, idx) => ({ line, idx }))
+      .filter(obj => /^\s*STEP\s*:/i.test(obj.line));
+    const parsedSteps = stepLines.map(obj => {
+      stepLineNumbers.push(obj.idx + 1);
+      const parts = obj.line.replace(/^\s*STEP\s*:/i, '').split(',').map(s => s.trim());
       return {
         id: parts[0] || '',
         name: parts[1] || '',
         type: parts[2] || '',
         shape: parts[3] || '',
-        description: parts.slice(4).join(', ') || '' // In case description contains commas
+        description: parts.slice(4).join(', ') || '',
+        line: obj.idx + 1
       };
     });
     setSteps(parsedSteps);
 
-    // Validate mandatory fields in STEP definitions
+    // Allowed TYPE and SHAPE values
+    const allowedTypes = [
+      'start', 'end', 'process', 'decision', 'input', 'output', 'database', 'document'
+    ];
+    const allowedShapes = [
+      'rectangle', 'roundedrect', 'diamond', 'circle', 'cylinder', 'trapezoid'
+    ];
+
+    // Validate mandatory fields and TYPE/SHAPE in STEP definitions
     parsedSteps.forEach((step, idx) => {
-      if (!step.id || !step.name || !step.type || !step.shape) {
-        newErrors.push(
-          `STEP ${step.id ? `ID '${step.id}'` : `#${idx+1}`}: Missing mandatory field(s): ` +
-          [!step.id ? 'ID' : null, !step.name ? 'NAME' : null, !step.type ? 'TYPE' : null, !step.shape ? 'SHAPE' : null]
-            .filter(Boolean).join(', ')
-        );
+      const missing = [];
+      if (!step.id) missing.push('ID');
+      if (!step.name) missing.push('NAME');
+      if (!step.type) missing.push('TYPE');
+      if (!step.shape) missing.push('SHAPE');
+      if (missing.length > 0) {
+        newErrors.push(`Line ${step.line}: STEP ${step.id ? `ID '${step.id}'` : `#${idx+1}`}: Missing mandatory field(s): ${missing.join(', ')}`);
+      }
+      if (step.type && !allowedTypes.includes(step.type.toLowerCase())) {
+        newErrors.push(`Line ${step.line}: STEP ID '${step.id}': Invalid TYPE '${step.type}'. Allowed: ${allowedTypes.join(', ').toUpperCase()}`);
+      }
+      if (step.shape && !allowedShapes.includes(step.shape.toLowerCase())) {
+        newErrors.push(`Line ${step.line}: STEP ID '${step.id}': Invalid SHAPE '${step.shape}'. Allowed: ${allowedShapes.join(', ')}`);
       }
     });
 
-    // Parse LINK definitions
-    const linkLines = inputText.split(/\r?\n/).filter(line => /^\s*LINK\s*:/i.test(line));
-    const parsedLinks = linkLines.map(line => {
-      const parts = line.replace(/^\s*LINK\s*:/i, '').split(',').map(s => s.trim());
+    // Parse LINK definitions and track line numbers
+    const linkLines = lines
+      .map((line, idx) => ({ line, idx }))
+      .filter(obj => /^\s*LINK\s*:/i.test(obj.line));
+    const parsedLinks = linkLines.map(obj => {
+      linkLineNumbers.push(obj.idx + 1);
+      const parts = obj.line.replace(/^\s*LINK\s*:/i, '').split(',').map(s => s.trim());
       return {
         from: parts[0] || '',
         to: parts[1] || '',
-        label: parts[2] || ''
+        label: parts[2] || '',
+        line: obj.idx + 1
       };
     });
     setLinks(parsedLinks);
 
-    // S002.4: Validate mandatory fields in LINK definitions
-    parsedLinks.forEach((link, idx) => {
-      if (!link.from || !link.to) {
-        newErrors.push(
-          `LINK #${idx+1}: Missing mandatory field(s): ` +
-          [!link.from ? 'FROM' : null, !link.to ? 'TO' : null]
-            .filter(Boolean).join(', ')
-        );
-      }
-    });
-
+    // S002.4: Validate mandatory fields in LINK definitions (but partial links are allowed, so skip this check)
     // S002.7: Validate STEP IDs for uniqueness and allowed format
     const idFormat = /^[a-zA-Z0-9_\-]+$/; // No spaces/special chars, allow letters, numbers, _ and -
     const seenIds = new Set();
@@ -85,15 +118,28 @@ function App() {
       if (step.id) {
         const idLower = step.id.toLowerCase();
         if (seenIds.has(idLower)) {
-          newErrors.push(`STEP ID '${step.id}' is not unique (case-insensitive).`);
+          newErrors.push(`Line ${step.line}: STEP ID '${step.id}' is not unique (case-insensitive).`);
         } else {
           seenIds.add(idLower);
         }
         if (!idFormat.test(step.id)) {
-          newErrors.push(`STEP ID '${step.id}' contains invalid characters (no spaces or special chars).`);
+          newErrors.push(`Line ${step.line}: STEP ID '${step.id}' contains invalid characters (no spaces or special chars).`);
         }
       }
     });
+
+    // S004.6: Detect isolated steps (not linked from or to any other node)
+    if (parsedSteps.length > 0 && parsedLinks.length > 0) {
+      const allStepIds = parsedSteps.map(s => s.id.toLowerCase());
+      const linkedFrom = new Set(parsedLinks.map(l => l.from.toLowerCase()).filter(Boolean));
+      const linkedTo = new Set(parsedLinks.map(l => l.to.toLowerCase()).filter(Boolean));
+      parsedSteps.forEach(step => {
+        const id = step.id.toLowerCase();
+        if (!linkedFrom.has(id) && !linkedTo.has(id)) {
+          newErrors.push(`Line ${step.line}: Node ID '${step.id}' is defined but not linked to or from any other node.`);
+        }
+      });
+    }
 
     setErrors(newErrors);
 
@@ -224,18 +270,48 @@ function App() {
           </div>
         </div>
 
-        <div className="error-panel">
-          <h2>Errors & Warnings</h2>
-          <div className="error-list">
-            {errors.length === 0 ? (
-              <p>No errors yet. Happy flowcharting!</p>
-            ) : (
-              errors.map((err, idx) => (
-                <p key={idx}>{err}</p>
-              ))
-            )}
+        {/* Error Panel with open/close tab */}
+        {errorPanelOpen ? (
+          <div className="error-panel">
+            <div style={{ position: 'absolute', top: 0, right: 0, cursor: 'pointer', background: '#ffebeb', border: 'none', borderRadius: '0 5px 0 0', padding: '2px 8px', zIndex: 2 }}
+              onClick={() => setErrorPanelOpen(false)}
+              title="Close error panel"
+            >
+              &gt;
+            </div>
+            <h2>Errors & Warnings</h2>
+            <div className="error-list">
+              {errors.length === 0 ? (
+                <p>No errors yet. Happy flowcharting!</p>
+              ) : (
+                errors.map((err, idx) => (
+                  <p key={idx}>{err}</p>
+                ))
+              )}
+            </div>
           </div>
-        </div>
+        ) : (
+          <div
+            style={{
+              position: 'relative',
+              width: '20px',
+              minWidth: '20px',
+              height: '100%',
+              background: '#ffebeb',
+              border: '1px solid #ff0000',
+              borderRadius: '5px 0 0 5px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              zIndex: 2
+            }}
+            onClick={() => setErrorPanelOpen(true)}
+            title="Open error panel"
+          >
+            <span style={{ color: '#ff0000', fontWeight: 'bold' }}>&lt;</span>
+          </div>
+        )}
       </main>
     </div>
   );
