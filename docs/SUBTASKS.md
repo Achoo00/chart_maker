@@ -34,14 +34,14 @@
 | S005.2 | Implement error panel visibility: open by default, close/reopen tab, auto-open on new errors | 25 | S004.1, S004.3 | To Do |
 | S005.3 | Ensure error panel is fixed width (< 1/3 screen) | 10 | S005.2 | To Do |
 | **T006: Export Functionality** | | | | |
-| S006.1 | Implement "Download PNG" button | 15 | S003.3 | To Do |
-| S006.2 | Implement "Download SVG" button | 15 | S003.3 | To Do |
-| S006.3 | Implement option for transparent background on image export (default white) | 10 | S006.1, S006.2 | To Do |
-| S006.4 | Implement "Download Text" (.txt) button for input area content | 10 | S002.1 | To Do |
+| S006.1 | Implement "Download PNG" button | 15 | S003.3 | Done |
+| S006.2 | Implement "Download SVG" button | 15 | S003.3 | Done |
+| S006.3 | Implement option for transparent background on image export (default white) | 10 | S006.1, S006.2 | Done |
+| S006.4 | Implement "Download Text" (.txt) button for input area content | 10 | S002.1 | Done |
 | **T007: Documentation & Default State** | | | | |
-| S007.1 | Create comprehensive example template string | 15 | 0 | To Do |
-| S007.2 | Load input text area with the default example template on app load | 15 | S002.1, S007.1 | To Do |
+| S007.1 | Create comprehensive example template string | 15 | 0 | Done |
+| S007.2 | Load input text area with the default example template on app load | 15 | S002.1, S007.1 | Done |
 | **T008: Cross-Browser Compatibility Testing** | | | | |
-| S008.1 | Test full application functionality across Chrome, Firefox, Edge, Safari | 40 | All previous S-tasks | To Do |
+| S008.1 | Test full application functionality across Chrome, Firefox, Edge, Safari | 40 | All previous S-tasks | In Progress |
 | **T009: Performance Optimization** | | | | |
 | S009.1 | Profile and optimize parsing/rendering for typical workflow sizes (100 nodes/200 links) | 30 | S002.2, S002.3, S002.4, S003.3 | To Do |

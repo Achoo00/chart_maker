@@ -82,182 +82,220 @@ This document serves as a persistent knowledge base for the FlowGenius project. 
 
 -----
 
-## 5. Debugging Log: React + Mermaid Rendering Issue (2024-06)
+## 5. Debugging Logs
 
-### Problem
-- Flowchart preview area did not render the diagram, even though the Mermaid definition was correct and no errors appeared in the console.
-- The `.mermaid` element was present, but the SVG was empty or missing.
+### 5.1 React + Mermaid Rendering Issue (2025-07-21)
 
-### Step-by-Step Debugging Process
+#### Problem Statement
+- **Error:** Flowchart preview area did not render the diagram
+- **Context:** React application with Mermaid v10+
+- **Symptoms:**
+  - No visible errors in console
+  - `.mermaid` element present but SVG content empty (`<g></g>`)
 
-1. **Initial Checks**
-   - Verified that Mermaid was initialized and the correct definition was being generated (multi-line, valid syntax).
-   - Confirmed no errors in the browser console.
+#### Investigation
+1. **Initial Verification**
+   - Confirmed Mermaid initialization
+   - Validated Mermaid definition syntax
+   - Verified no console errors
 
-2. **DOM Inspection**
-   - Inspected the `.mermaid` element after clicking "Generate Flowchart".
-   - Found that the SVG was present but empty (`<g></g>`), indicating Mermaid attempted to render but failed.
+2. **DOM Analysis**
+   - Inspected `.mermaid` element post-render
+   - Found empty SVG structure
+   - Determined Mermaid attempted but failed to render
 
-3. **Console Logging**
-   - Added `console.log` after `mermaid.init` to inspect the innerHTML of the preview div.
-   - Confirmed that after `mermaid.init`, the SVG was still empty.
+3. **Root Cause**
+   - Using `mermaid.init` with React's dynamic rendering
+   - Timing issues between React's virtual DOM and Mermaid's initialization
 
-4. **Hypothesis**
-   - Suspected a timing or API issue, especially with Mermaid v10+ and React's dynamic rendering.
-   - Noted that `mermaid.init` is not recommended for dynamic rendering in React with newer Mermaid versions.
-
-5. **Solution: Switch to `mermaid.render`**
-   - Updated the rendering logic to use `mermaid.render(id, definition)`, which returns a Promise with the SVG string.
-   - Injected the SVG string directly into the preview div's `innerHTML`.
-   - Example:
-     ```js
-     useEffect(() => {
-       if (
-         typeof window === 'undefined' ||
-         typeof document === 'undefined' ||
-         !mermaidDef ||
-         errors.length > 0 ||
-         !previewRef.current
-       ) {
-         return;
-       }
-       setMermaidError('');
-       const renderId = 'mermaid-' + Date.now();
-       mermaid.render(renderId, mermaidDef)
-         .then(({ svg }) => {
-           previewRef.current.innerHTML = svg;
-           console.log('Mermaid SVG rendered:', svg);
-         })
-         .catch(err => {
-           setMermaidError('Mermaid rendering error: ' + err.message);
-         });
-     }, [mermaidDef, errors]);
-     ```
-
-6. **Result**
-   - The flowchart rendered correctly in the preview area.
-   - This approach is robust for React + Mermaid v10+ integration.
-
-### Key Takeaway
-- For React apps using Mermaid v10+, always use `mermaid.render` for dynamic diagram rendering. Avoid `mermaid.init` for dynamic or programmatic rendering in React.
-
------
-
-## Robust Mermaid.js Rendering in React: Solution Log
-
-### Problem Encountered
-- **Error:** `can't access property "createElementNS", document is undefined` (from d3-selection, used by Mermaid)
-- **Context:** Occurred when trying to render Mermaid diagrams in a React app, especially during hot reload, tests, or in non-browser contexts.
-- **Symptoms:** The error appeared in the browser console and prevented flowchart rendering.
-
-### Debugging Steps & Failed Approaches
-1. **Direct use of `mermaid.render` in event handler or useEffect:**
-   - Attempted to call `mermaid.render` and inject SVG into a target div.
-   - Added defensive checks for `window`, `document`, and ref presence.
-   - **Result:** Error persisted, especially during React hot reload or test runs.
-2. **Tried to use a ref and direct DOM manipulation:**
-   - Still encountered timing/context issues with the DOM.
-
-### Final Working Solution (Best Practice)
-- **Render a `<div className="mermaid">{mermaidDef}</div>` in the React component.**
-- **After each update, call `mermaid.init(undefined, '.mermaid')` in a `useEffect`.**
-- **Do not use `mermaid.render` or direct DOM manipulation.**
-- This approach lets Mermaid upgrade the div into a diagram, is robust to React's lifecycle, and avoids SSR/test/HMR issues.
-
-#### Example Implementation
-```jsx
-// In the render/return:
-<div className="mermaid">{mermaidDef}</div>
-
-// In useEffect:
+#### Solution
+```javascript
+// Updated rendering approach
 useEffect(() => {
-  if (
-    typeof window === 'undefined' ||
-    typeof document === 'undefined' ||
-    !mermaidDef ||
-    errors.length > 0
-  ) {
-    return;
-  }
-  setMermaidError('');
-  try {
-    mermaid.init(undefined, '.mermaid');
-  } catch (err) {
-    setMermaidError('Mermaid rendering error: ' + err.message);
-  }
+  if (typeof window === 'undefined' || !mermaidDef || errors.length > 0) return;
+  
+  const renderId = 'mermaid-' + Date.now();
+  mermaid.render(renderId, mermaidDef)
+    .then(({ svg }) => {
+      if (previewRef.current) {
+        previewRef.current.innerHTML = svg;
+      }
+    })
+    .catch(err => {
+      setMermaidError('Rendering error: ' + err.message);
+    });
 }, [mermaidDef, errors]);
 ```
 
-### Why This Works
-- Mermaid's `.init()` is designed to scan and upgrade `.mermaid` divs after the DOM is ready.
-- This avoids all direct DOM manipulation and is compatible with React's rendering lifecycle.
-- It is robust to hot reload, SSR, and test environments.
-
-### Additional Notes
-- For Jest tests, mock the `mermaid` module in `setupTests.js` to avoid ESM import errors.
-- This pattern is recommended for any React + Mermaid integration.
+#### Key Learnings
+1. Use `mermaid.render()` instead of `mermaid.init` in React
+2. Handle async rendering with Promises
+3. Include proper cleanup and error handling
 
 ---
 
-## Analysis
+### 5.3 Mermaid Link Parsing Error (2025-07-22)
 
-- **No errors in the console** (other than a minor eslint warning, which is unrelated to rendering).
-- **Mermaid is initialized** (so the library is loaded).
-- **The “Flowchart Preview” area shows the raw Mermaid definition as text, not a rendered diagram.**
-- The Mermaid definition you posted is:
-  ```
-  flowchart LR S1(Start\nBegin the process) S2[Do Task\nPerform the main task] S3{Decision\nIs it complete?} S4(End\nFinish) S1 -->|Next| S2 S2 -->|Check| S3 S3 -->|No| S2 S3 -->|Yes| S4 
-  ```
-  This is a single line, not the usual multi-line Mermaid format.
+#### Problem Statement
+- **Error:** `Parse error on line 12: ...ted)) start -->|| input_creds in ----------------------^ Expecting 'TAGEND', 'STR', 'MD_STR', 'UNICODE_TEXT', 'TEXT', 'TAGSTART', got 'PIPE'`
+- **Context:** Mermaid flowchart generation with empty link labels
+- **Impact:** Flowchart failed to render with empty link labels
 
----
+#### Solution
+```javascript
+// Before (problematic)
+`${from} -->|${label || ''}| ${to}`
 
-## Hypothesis
-
-**Mermaid expects each node and edge to be on its own line.**  
-If you pass the entire definition as a single line, Mermaid may not parse it correctly, resulting in no diagram being rendered.
-
----
-
-## Debugging Step
-
-### 1. **Check the Mermaid Definition Formatting**
-
-Let’s log the actual `mermaidDef` string to the console before rendering, to see if it’s formatted as expected.
-
-**Add this line before `setMermaidDef(def);` in your `handleGenerate` function:**
-```js
-console.log('Generated Mermaid Definition:', def);
+// After (fixed)
+if (label) {
+  mermaidCode += `    ${from} -->|${label}| ${to}\n`;
+} else {
+  mermaidCode += `    ${from} --> ${to}\n`;
+}
 ```
 
-Then:
-- Enter your flowchart definition and click “Generate Flowchart.”
-- Check the console for the output.  
-- Is the Mermaid definition multi-line, with each node/edge on its own line?
+#### Key Learnings
+1. Mermaid is sensitive to empty link labels in certain versions
+2. Use conditional rendering for link syntax based on label presence
+3. The `-->` syntax is preferred for unlabeled links over `-->||`
 
 ---
 
-### 2. **Expected Format Example**
+### 5.2 Mermaid.js SSR Compatibility (2025-07-22)
 
-A correct Mermaid definition should look like:
+#### Problem Statement
+- **Error:** `can't access property "createElementNS", document is undefined`
+- **Context:** Server-side rendering (SSR) and test environments
+- **Impact:** Failed rendering in Next.js, Jest tests
+
+#### Solution
+```jsx
+// Component
+function Flowchart({ definition }) {
+  return <div className="mermaid">{definition}</div>;
+}
+
+// Effect hook
+useEffect(() => {
+  if (typeof window === 'undefined' || !mermaidDef) return;
+  
+  try {
+    mermaid.init(undefined, '.mermaid');
+  } catch (err) {
+    console.error('Mermaid init failed:', err);
+  }
+}, [mermaidDef]);
 ```
-flowchart LR
-  S1(Start\nBegin the process)
-  S2[Do Task\nPerform the main task]
-  S3{Decision\nIs it complete?}
-  S4(End\nFinish)
-  S1 -->|Next| S2
-  S2 -->|Check| S3
-  S3 -->|No| S2
-  S3 -->|Yes| S4
-```
+
+#### Key Learnings
+1. Mermaid requires browser environment
+2. Use `mermaid.init` with class selector pattern
+3. Always wrap in environment checks for SSR
 
 ---
 
-## Next Steps
+### 5.3 Node Click Highlighting (S005.1, 2025-07-22)
 
-1. **Add the console.log as above.**
-2. **Paste the output here** (or confirm if it matches the expected format).
-3. If it’s a single line, I’ll help you fix the code to generate a multi-line Mermaid definition.
+#### Problem Statement
+- **Issue:** Node clicks not highlighting corresponding text
+- **Error:** `No SVG node found for step S1`
+- **Environment:** Mermaid v11+
 
-Let me know what you find!
+#### Investigation
+- **Findings:**
+  - Mermaid v11+ uses complex node ID patterns
+  - Previous selector `[id$='-S1']` too simplistic
+  - Actual ID format: `flowchart-<stepId>-<index>`
+
+#### Solution
+```javascript
+// Updated selector pattern
+const selector = `[id^="flowchart-"][id*="-${stepId}-"]`;
+document.querySelectorAll(selector).forEach(node => {
+  node.addEventListener('click', handleNodeClick);
+});
+```
+
+#### Key Learnings
+1. Mermaid v11+ node ID format: `flowchart-<stepId>-<index>`
+2. Use combined attribute selectors for reliable matching
+3. Handle multiple matching elements
+
+---
+
+### 5.4 PNG Export Functionality (2025-07-22)
+
+#### Problem Statement
+- **Error:** `URL.createObjectURL: Argument 1 could not be converted to any of: Blob, MediaSource`
+- **Context:** PNG export functionality
+- **Impact:** Failed to generate downloadable PNG
+
+#### Technical Analysis
+- **Root Cause:**
+  - Missing SVG dimensions and viewBox
+  - Improper Blob creation
+  - Resource cleanup issues
+
+#### Solution
+```javascript
+// 1. Prepare SVG
+const svgClone = svgElem.cloneNode(true);
+const bbox = svgElem.getBBox();
+svgClone.setAttribute('width', bbox.width);
+svgClone.setAttribute('height', bbox.height);
+svgClone.setAttribute('viewBox', `${bbox.x} ${bbox.y} ${bbox.width} ${bbox.height}`);
+
+// 2. Convert to PNG
+const canvas = document.createElement('canvas');
+const ctx = canvas.getContext('2d');
+canvas.width = bbox.width;
+canvas.height = bbox.height;
+
+// 3. Cleanup
+const cleanup = () => {
+  URL.revokeObjectURL(url);
+  document.body.removeChild(link);
+};
+```
+
+#### Key Learnings
+1. Always set explicit SVG dimensions
+2. Properly manage browser resources
+3. Implement comprehensive error handling
+4. Clean up object URLs to prevent memory leaks
+
+---
+
+## 6. General Debugging Guidelines
+
+### Common Patterns
+1. **For Mermaid in React:**
+   - Use class-based selectors with `mermaid.init`
+   - Handle SSR with environment checks
+   - Prefer functional components with hooks
+
+2. **For SVG Manipulation:**
+   - Always check for valid dimensions
+   - Use `getBBox()` for accurate measurements
+   - Clone nodes before modification
+
+3. **For File Operations:**
+   - Implement proper error boundaries
+   - Clean up resources (URLs, event listeners)
+   - Provide user feedback for all states
+
+### Best Practices
+1. **Error Handling**
+   - Catch and log all async operations
+   - Provide user-friendly error messages
+   - Implement fallback behaviors
+
+2. **Performance**
+   - Debounce rapid state updates
+   - Use refs for DOM operations
+   - Clean up effects and subscriptions
+
+3. **Testing**
+   - Mock browser APIs in tests
+   - Test edge cases (empty states, errors)
+   - Verify accessibility
