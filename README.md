@@ -1,3 +1,8 @@
+
+# Flowchart Maker
+
+Flowchart Maker is a web application that allows users to easily create, edit, and manage flowcharts directly in their browser. Designed for simplicity and flexibility, it provides an intuitive drag-and-drop interface, customizable templates, and export options for sharing or embedding your diagrams. Whether you're mapping out processes, brainstorming ideas, or visualizing workflows, Flowchart Maker helps you bring your concepts to life quickly and efficiently.
+
 # Getting Started with Create React App
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
